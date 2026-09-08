@@ -70,3 +70,9 @@ npm run test:public
 该命令只用静态检查及 mock，不安装依赖、不启动桌面/播放器。原生测试需 Swift/SDK，光栅化测试需开发依赖；全量测试需要另行准备环境；测试范围见 [发行说明](docs/PUBLIC-DISTRIBUTION.md)。
 
 [LICENSE](LICENSE) 授权 ymd-physics 的原创代码、测试和文档（含语音模块）为 MIT，Copyright 2026 ymd-physics。[LICENSES.md](LICENSES.md) 区分原创与改编：Chengzhibense/Fairy-DSH 的 Apache-2.0 改编图形保留原 NOTICE、源提交和修改说明。两种代码许可都不转授游戏角色、商标、合成声音或模型权利。原创程序合成开场 SFX 保留，非游戏采样。
+
+## 部分参考与致谢
+
+部分 Fairy 视觉素材与待机动画实现参考并改编自 [Chengzhibense/Fairy-DSH](https://github.com/Chengzhibense/Fairy-DSH)。感谢原作者的开源工作。具体改编范围、源版本与署名见 [NOTICE](modules/animation/NOTICE)；相关 Apache-2.0 许可证与原始声明均随仓库保留。
+
+参考项目地址：<https://github.com/Chengzhibense/Fairy-DSH>
