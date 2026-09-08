@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "width": 256,
+  "height": 256,
+  "intervalMs": 50,
+  "count": 120,
+  "variants": [
+    "dark",
+    "light"
+  ]
+}

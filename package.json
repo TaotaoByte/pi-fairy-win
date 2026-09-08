@@ -1,0 +1,71 @@
+{
+  "name": "pi-fairy",
+  "version": "0.7.0",
+  "description": "Fairy animation and independent voice notifications for Pi",
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSES.md",
+  "private": true,
+  "scripts": {
+    "test": "npm run test:animation && npm run test:voice && npm run test:composition",
+    "test:animation": "node --experimental-strip-types --test modules/animation/tests/*.test.ts",
+    "test:voice": "node --experimental-strip-types --test modules/voice/tests/*.test.ts",
+    "test:composition": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:startup-entry": "python3 modules/animation/tests/startup-entry.py",
+    "prepare:desktop": "node --experimental-strip-types modules/animation/scripts/prepare-desktop.ts",
+    "build:frames": "node modules/animation/scripts/build-frames.mjs",
+    "check:assets": "python3 modules/animation/tests/check-assets.py",
+    "smoke:desktop": "node --experimental-strip-types modules/animation/tests/smoke-desktop.ts",
+    "check:effects": "python3 modules/animation/tests/check-desktop-effects.py",
+    "test:public": "node --experimental-strip-types --test modules/animation/tests/help.test.ts modules/voice/tests/fairy.test.ts tests/composition.test.ts"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "2.6.2"
+  },
+  "files": [
+    "index.ts",
+    "README.md",
+    "CHANGELOG.md",
+    "LOCAL-CUSTOMIZATION.md",
+    "LICENSES.md",
+    "FAIRY-VOICE-PLAN.md",
+    "docs/*.md",
+    "modules/animation/src/",
+    "modules/animation/native/",
+    "modules/animation/assets/",
+    "modules/animation/scripts/",
+    "modules/animation/tests/*.ts",
+    "modules/animation/tests/*.py",
+    "modules/animation/docs/*.md",
+    "modules/animation/docs/*.png",
+    "modules/animation/docs/*.gif",
+    "modules/animation/README.md",
+    "modules/animation/LOCAL-CUSTOMIZATION.md",
+    "modules/animation/LICENSES.md",
+    "modules/animation/NOTICE",
+    "modules/animation/licenses/",
+    "modules/voice/fairy.ts",
+    "modules/voice/tests/*.ts",
+    "modules/voice/*.md",
+    "modules/voice/source-package.json",
+    "modules/voice/provenance.json",
+    "modules/voice/sounds/",
+    "tests/*.ts",
+    "LICENSE",
+    "RELEASE-CHECKLIST.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ymd-physics/pi-fairy.git"
+  },
+  "keywords": [
+    "pi-package"
+  ]
+}

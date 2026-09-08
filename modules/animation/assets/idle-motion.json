@@ -1,0 +1,12 @@
+{
+  "_provenance": "Apache-2.0; adapted from Fairy-DSH, Copyright 2026 Chengzhibense, d639887a386b0de6fef2e61c97dc268631854591, mascot-style.js and mascot-runtime.js. MODIFIED: 1500ms breath, normalized phase leads, 12000ms rotation, no browser states. See ../NOTICE.",
+  "breathMs": 1500,
+  "rotationMs": 12000,
+  "bezier": [0.72, 0, 0.28, 1],
+  "layers": {
+    "sclera": { "expanded": 0.985, "contracted": 0.91, "lead": 0 },
+    "iris-outer": { "expanded": 1, "contracted": 0.90, "lead": 0.03125 },
+    "iris-blue": { "expanded": 1, "contracted": 0.87, "lead": 0.0625 },
+    "pupil": { "expanded": 1, "contracted": 0.85, "lead": 0.125 }
+  }
+}

@@ -1,0 +1,34 @@
+MIT License — scoped original work only
+
+Copyright (c) 2026 ymd-physics
+
+This license applies to original code, tests, documentation and build glue by
+ymd-physics, including the voice module and FAIRY-VOICE-PLAN.md, and the original
+procedural intro SFX and its generator.
+
+It does NOT apply to reproduced upstream notices, Apache-2.0 adaptations and
+visual derivatives identified in modules/animation/NOTICE, or dependencies.
+These retain their separate terms. Game characters, trademarks, synthesized
+character voices, models and other third-party content rights are not licensed
+by this document. The 44 bundled voice-module WAVs have separate provenance and
+rights considerations described in docs/AUDIO-PROVENANCE.md; their inclusion
+does not grant third-party rights or extend this MIT license to them.
+See LICENSES.md for the scope matrix.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
