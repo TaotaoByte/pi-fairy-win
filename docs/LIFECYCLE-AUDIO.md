@@ -1,158 +1,35 @@
-# Shared desktop lifecycle audio
+# 共享桌面音频
 
-The integrated root alone passes `automaticLifecycleCues: false` and
-`processMute: true`, `activityReminders: false` to voice and
-an absolute `modules/voice/sounds/` directory to animation. This suppresses only
-automatic per-Pi startup/quit audio, not either session handler: timer/dialog/
-player cleanup and permission/usage unsubscription still run. `/resume`, `/new`,
-model, task, permission, compaction, usage and explicit
-`/fairy-voice test welcome|goodbye` keep their existing behavior. Direct voice
-module registration defaults to the original behavior. No standalone source,
-global settings, sound bytes, artwork or animation sampler was changed.
+集成根入口将自动欢迎、告别和[休息提醒](REST-REMINDER.md)交给同一个原生桌面 owner。
+只有符合条件的交互式 macOS Pi 持有桌面连接；子代理、非交互或桌面关闭时无自动共享提示。
+独立语音模块的默认行为不同，请只安装根入口，勿同时加载两份语音。
 
-The integrated [rest reminder](REST-REMINDER.md) now also belongs to the shared
-owner, with no legacy per-Pi activity timer/dialog even in desktop-disconnected use.
-Both normal and pre-TUI launches opt in with `--rest-reminder`; raw diagnostics
-reject this option before resources. Activity playback uses a 9s budget to fit the
-unchanged 8.09s activity-3 clip; the lifecycle budgets below remain unchanged.
+- 第一次有效连接触发[保存的 full/simple 开场](DESKTOP-INTRO.md)，后续连接不重播。
+- 最后连接断开（包括 Pi 崩溃或 `/fairy-anim off`）后等待 **3 秒**；宽限内重连取消退场，
+  不告别也不再欢迎。提交退场后尝试一次告别并完成本地收缩动画。
+- **`/fairy-voice off` 不控制共享欢迎、SFX、告别或休息提醒。** 它只静音本 Pi 的其他语音，
+  状态跨 reload/会话切换保留，新进程默认开启。没有全局静音设置。
+- 原生语音不会互相重叠，告别可中断欢迎/活动提醒；SFX 独立，可能与欢迎同时播放。
+  其他 Pi 事件语音独立管理优先级，可能与共享声音重叠。详见[语音模块](../modules/voice/README.md)。
 
-## Scope and mute
+## 播放与故障边界
 
-- The integrated desktop starts one [saved full/simple opening](DESKTOP-INTRO.md)
-  after its first validated interactive lease. Full welcome7 begins after HDD
-  progress/materialization; simple chooses available welcome1–6 after central
-  growth. More Pi clients do not replay it; commands affect only the next owner.
-  Early final-lease loss or display interruption stops/suppresses welcome;
-  normal grace and later farewell remain.
-- Final desktop lease loss starts the existing 3-second grace. A valid client
-  returning before retirement commits cancels it, with neither farewell nor
-  another welcome. Reload/session replacement use this same lease mechanism.
-- After grace the desktop performs the same local 0.95s expansion/shrink/fade
-  for either welcome mode, alongside one farewell, even if
-  the final Pi crashed or received SIGKILL. `/fairy-anim off` or switching the
-  final desktop client off also ends this desktop lifetime, even if Pi
-  itself remains alive. Integrated desktop-disconnected/noninteractive use has no
-  automatic welcome/farewell. Subagents remain ineligible for desktop leases.
-- **Shared desktop welcome/farewell/rest reminders are independent of per-Pi `/fairy-voice off`.**
-  Mute continues to govern this Pi's other sounds, including
-  across reload/session replacement; a fresh process starts unmuted. See the
-  [voice audit](VOICE-AUDIT.md) for compaction load order and validation. Command
-  help, off confirmation text and status explain the exception. There is no
-  global mute setting or shared voice settings UI.
-- Native lifecycle playback never overlaps another native lifecycle clip:
-  farewell preempts unfinished welcome. It can overlap per-Pi notifications;
-  existing non-lifecycle priorities are unchanged, not globally arbitrated.
-- Killing the helper itself with SIGKILL, OS shutdown, loss of audio hardware,
-  missing/unreadable clips or player failure cannot guarantee audible farewell.
-  Cues are single playback attempts, not durable or retryable notifications.
+欢迎/告别通过 `/usr/bin/afplay` 播放包内文件，单次尝试、无重试。
+完整开场只用 welcome-7；简洁开场从 welcome-1 至 6 选择；告别从 goodbye-1 至 6 选择。
+不保存跨 helper 生命周期的随机选择历史。缺失/不可读文件、播放器失败、音频硬件丢失、
+OS 关闭或 helper 被 SIGKILL 均不能保证可听提示，也不会下载替代文件。
 
-## Ownership and protocol
+欢迎/告别的播放器预算 **8 秒**，活动提醒 **9 秒**；超时先 TERM，200ms 后 KILL，
+只管理自己的播放器 PID。执行依赖主循环前进和进程启动返回，**不是独立的硬性退出 watchdog**。
+helper 保持所有权锁直到视觉完成且音频 idle；慢退场可能超过客户端的 10 秒连接预算。
+[已知退出风险](DESKTOP-INTRO.md#已知退出风险)仍未解决；超时后可显式 off/on 重试。
 
-The same private per-user directory, persistent flock inode, source-hashed
-Swift cache, stale socket safeguards and saved size path are retained. Only the
-flock owner can create a panel or launch audio. Losers exit silently.
+## 更新与资源来源
 
-`FAIRY2` deliberately replaces the old one-sided `FAIRY1` handshake:
+使用私有 `/tmp/pi-fairy-UID/` 与 FAIRY2 租约；仅同用户可访问，但不是对同用户程序的身份认证。
+FAIRY1 与 FAIRY2 不兼容。更新时正常关闭所有旧桌面连接，等 helper 结束再重启所有 Pi；
+不删除活跃 socket、缓存或保存设置，不强制替换旧 helper。仅 reload 不会更新旧代码或音频目录。
+[提前入口](STARTUP-ENTRY.md)的临时租约不改变这些共享规则。
 
-1. Client sends `lease FAIRY2\n`.
-2. Owner replies `FAIRY2 <pid>\n` after validating the hello.
-3. The native protocol retains `theme auto|light|dark\n` for diagnostics/tests.
-   The animation extension no longer exposes a manual appearance command or sends
-   appearance overrides; new helpers retain their automatic macOS default.
-
-The optional [startup entry](STARTUP-ENTRY.md) adds a separate provisional
-`prelude FAIRY2 <UUID>` hello, software-ready acknowledgement and same-fd claim.
-Unclaimed provisional leases expire after15s; the original client protocol and
-claimed lifetime below remain unchanged. Old helpers reject the new hello without
-activation; no live helper is replaced.
-
-An accepted socket alone is not a lease and cannot show the pet, reset grace or
-play audio. Unqualified sockets expire after one second; malformed input closes
-the peer. The existing 64-peer/256-byte bounds remain, with bounded drain loops
-on the same 20 FPS main loop. This is protocol qualification, not cryptographic
-Pi identity: the private UID-owned 0700 directory is the security boundary.
-Same-user programs able to send the valid hello can deliberately acquire a lease.
-
-Retirement commits on the main loop after draining queued accepts and peer reads
-and observing final-lease grace expiry. This is not an atomic promise about a
-connection arriving just after that drain. After commit new connections receive
-`FAIRY2 retiring\n` and are closed, never admitted. The listener stays available
-for that response while the helper retains its lock through local visual
-completion and farewell. After both it removes only its owned socket, closes
-owned windows/server/timers, and exits. Ripple children detach before shrink.
-All server/client/lock descriptors are close-on-exec: a player cannot keep a
-lease or lock alive accidentally.
-
-`DesktopClient` waits through retiring responses without spawning losing
-helpers. When the old owner exits it may launch the next owner, with at least
-one second between connection-refused launch attempts and the existing three
-launch/two crash-reconnect limits. The original 10-second connection budget
-is not enlarged for retirement (first-use compilation retains its separate
-120-second budget). If an abnormal/slow retirement exceeds that budget the
-existing error is shown; `/fairy-anim off` then `on` is the explicit retry.
-
-## Separate intro effects (0.5.2)
-
-Integrated full launches also explicitly pass `--intro-sfx` to a separate
-in-process AVAudioPlayer owner. It may overlap unchanged welcome7 using the
-accepted SFX's baked ducking; no voice gain/mixing or lifecycle-player changes.
-It shares the once-per-qualified-owner opening, independent of per-Pi mute,
-and is stopped/invalidated on cancellation, retirement and shutdown.
-Missing/failed/stale preparation falls back to silent effects without blocking
-welcome or visuals. Raw/non-full/animation-only launches do not request it;
-headless/test/diagnostic SFX options fail closed. See
-[opening SFX timing and limits](DESKTOP-INTRO.md#original-sfx-v4-and-subtle-pulses).
-The following afplay budgets concern **only existing welcome/farewell**, not SFX.
-
-## Playback and silent diagnostics
-
-The helper launches `/usr/bin/afplay` directly with one absolute WAV argument,
-no shell and no Pi process dependency. Full opening uses exactly welcome7, with
-no fallback if missing. Non-full native welcome uses 1–6; goodbye randomly selects
-an available 1–6 recording from the integrated local directory. No new
-state file tracks choices between helper lifetimes. All current lifecycle clips
-are shorter than eight seconds (longest welcome 7.39s, farewell 6.13s).
-
-Main-loop ticks enforce an eight-second budget from the requesting tick's
-timestamp, then TERM and 200ms to KILL; further ticks observe exit before starting
-a pending farewell or exiting. `Process.run()` is synchronous, so enforcement
-requires launch to return and the loop to progress: this is not an independent
-end-to-end shutdown watchdog. Normal playback is expected to fit a new client's
-10-second retry window, not guaranteed to do so. See the retained
-[shutdown-delay risk](DESKTOP-INTRO.md#acceptance-and-known-risk--2026-09-06).
-The helper owns only its own player PID, never a system-wide player kill.
-
-Animation by itself passes no audio/intro option and stays silent/noncinematic.
-Integrated DesktopClient and early Startup launches add `--intro-saved` and
-`--intro-sfx`; the owner reads the saved mode after locking and ignores SFX for
-simple. Existing raw diagnostics do not opt in. `/fairy-anim welcome full|simple`
-changes only the next owner, using a separate non-lease acknowledgement channel
-or an offline flock-owning settings command; it never changes audio mute policy. Native explicit
-launch options are `--lifecycle-sounds /absolute/directory` and, for isolated
-recording diagnostics, `--lifecycle-player /absolute/executable`. These options
-are never taken from socket messages. Headless audio requires an explicit player
-so existing automated headless launches cannot accidentally invoke afplay.
-
-`modules/animation/tests/lifecycle.test.ts` compiles the real helper and uses an
-executable Python recording player, private sockets/preferences, including an
-actual AppKit eight-launch scenario. It verifies no-client/malformed silence,
-first/last cues, grace reconnect, final Pi SIGKILL, newcomer during farewell,
-player parent/path, welcome preemption, bounded stubborn-player cleanup and
-animation-only silence. GUI size/effects smoke still passes no audio option.
-Tests do not certify perceived sound, physical dragging, Spaces or fullscreen.
-
-## Upgrade and provenance
-
-**Close/restart all old Pi instances in a controlled upgrade.** Release every
-old desktop lease and wait until its helper exits before loading the reviewed
-root. FAIRY1 and FAIRY2 clients/helpers cannot share leases. A live old helper
-is never unlinked or force-upgraded; incompatible greeting errors instruct a
-full Pi restart. On subsequent FAIRY2 upgrades allow grace plus farewell to
-finish (normally under 12 seconds) before switching versions. No cache or size
-preferences should be deleted.
-
-`modules/voice/provenance.json` identifies original-code lineage and hashes of the
-shipped voice implementation/tests and all 44 bundled WAVs. Their distribution
-is an explicit owner instruction, not a third-party rights grant. Original standalone metadata is historical; current original code/docs
-are MIT under the root LICENSE. This document describes integrated lifecycle
-logic; see [public resource boundaries](PUBLIC-DISTRIBUTION.md) for validation limits.
+全部 44 个语音 WAV 的 SHA-256 与代码来源见[provenance.json](../modules/voice/provenance.json)，
+权利限制见[音频来源](AUDIO-PROVENANCE.md)。完整资源与模拟测试不证明实际播放质量或音画时序。

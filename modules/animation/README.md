@@ -29,15 +29,15 @@ full 保留完整 HDD 开场 V1、SFX v4 和 welcome7；simple 为 2.4 秒中心
 - 只有交互式 Pi (`ctx.mode=tui`) 连接。`PI_SUBAGENT_CHILD` 排除 pi-subagents 子进程；
   不使用 root 也设置的 `PI_SUBAGENT_PARENT_SESSION`，不写继承性标记、不扫描进程。
 - 一个原生 Swift/AppKit 进程拥有窗口、Unix socket 与连接计数；没有 Node broker、
-  Electron、网络端口、任务事件、语音、登录项或后台自动启动。Pi 退出/崩溃自动断开。
-  任意 Pi 可首先启动，后续共享；最后一个启用桌面的连接断开后 **3秒**退出。
+  Electron、网络端口、任务事件订阅、登录项或后台自动启动；集成版共享声音由此 owner 播放。Pi 退出/崩溃自动断开。
+  任意 Pi 可首先启动，后续共享；最后一个启用桌面的连接断开后有 **3秒**宽限，再退场并等待共享音频结束。
   reload 重叠/短暂断开保留同一窗口与动画时钟。进程 detached，stdio 为 `/dev/null`。
 - **on/off/toggle 只改变当前 Pi 的桌面连接**。off 不杀其它 Pi 的 Fairy；若是最后一个，
-  图片在3秒宽限期后消失。
+  图片在3秒宽限期后开始退场。
 - **桌面自动跟随 macOS 系统外观**，不取 Pi 主题；双主题美术、coolblue 交互配色与开场不变。
   旧手动外观命令仅提示用法，不连接桌面或改变显示状态。新连接不发送外观覆盖。
   若存活的旧 helper 仍保留手动覆盖，需退出所有 Pi，等共享 helper 结束后再重启 Pi，
-  新 helper 默认恢复 auto；仅 `/reload` 不重置旧 helper，本次更新也不会主动重置它。
+  新 helper 默认恢复 auto；仅 `/reload` 不重置旧 helper，更新也不会主动重置它。
 - 左键按住 Fairy 可自由拖动；非激活透明 NSPanel，不抢键盘焦点，无 Dock 图标/阴影；statusBar 窗口层级，
   为接收拖动，待机桌宠窗口范围不再点击穿透。完成拖动后保存位置，集成版下次开场回到该位置。
   `canJoinAllSpaces/fullScreenAuxiliary`。不申请辅助功能/录屏权限。
@@ -58,7 +58,7 @@ full 保留完整 HDD 开场 V1、SFX v4 和 welcome7；simple 为 2.4 秒中心
 
 ### 右键尺寸菜单（仅桌面）
 
-右键 Fairy 打开原创 HDD 风格紧凑面板：炭黑硬边、黄绿色选中条、等宽标签与 `[x]`。
+右键 Fairy 打开原创 HDD 风格紧凑面板：炭黑底、冷蓝选中条、等宽标签与 `[x]`。
 无需先激活 Fairy，左键选项立即改变共享桌宠尺寸；成功保存后关闭菜单。
 再次右键（Fairy 或菜单）、点击其它位置、开始拖动 Fairy 都关闭菜单。
 菜单和桌宠均不成为 key/main window；**不支持 Escape**，键盘仍归当前应用。
@@ -87,24 +87,14 @@ v1 尺寸会在成功写入时迁移。缺失/损坏数据安全回退，默认 
 
 **更新已运行的共享 helper：** `/reload` 不替换仍存活的旧 helper。请在所有连接 Pi 中
 `/fairy-anim off`（或退出），等最后连接断开超过3秒，再 on；不要杀别人的 helper。
-新进程自动构建新源哈希并读取同一偏好。仅本次 reload 时，旧进程会保留原行为。
+新进程自动构建新源哈希并读取同一偏好。仅 reload 时，旧进程会保留原行为。
 
 ![桌面尺寸菜单（自身 AppKit view 离屏渲染，非桌面截图）](docs/desktop-size-menu.png)
 
-测试隔离：`FAIRY_SETTINGS_DIRECTORY` 仅由直接启动 helper 的测试环境指定，替代偏好目录。
-正常 Pi 启动 helper 不转发该变量。`--size-self-test` 必须设置隔离目录；测试偏好、
-跨进程读取、异常与缩放数学。`--size-gui-test` 同样要求隔离目录，驱动自有菜单选项、
-保存失败/重试和清理；`FAIRY_MENU_PREVIEW=/absolute/path.png` 只渲染该菜单 view，
-不捕获其它窗口或桌面。GUI smoke 自动创建私有 IPC 和临时偏好目录。
-
 后端选项已移除；旧 `--fairy-anim-mode` 参数仅作拒绝迁移保护，任意值都会禁止本次桌面连接。请删除该参数后重启。
 
-```sh
-node --experimental-strip-types tests/smoke-desktop.ts # 可选：短暂显示桌面 Fairy，不截图
-```
-
-该smoke检查原生窗口进程启动、菜单预设点击处理/保存失败重试/monitor清理、主题命令与自动退出；不声称实际鼠标拖动、焦点保持、视觉大小、
-多屏热插拔、Spaces/其它应用全屏已人工验证。屏幕布局运行中改变暂不重新定位。
+可选 GUI 检查从包根目录运行 `npm run smoke:desktop`，会短暂显示桌宠。
+它不替代真实拖动、焦点、多屏/Spaces 验证；屏幕布局运行中改变暂不重新定位。
 
 ## 桌面美术资源
 

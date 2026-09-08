@@ -1,11 +1,11 @@
 # 安装、迁移与回滚
 
-本候选已包含完整资源，尚待独立发布审核与实际安装验证。先看根目录 README 与 RELEASE-CHECKLIST。
+本包包含完整资源。平台、依赖与安装命令见 [README](../README.md)，验证限制见 [PUBLIC-DISTRIBUTION](PUBLIC-DISTRIBUTION.md)。
 
 ## 正常安装
 
-正式发布获批后，可使用 `pi install https://github.com/ymd-physics/pi-fairy`。
-Pi 会访问网络、安装依赖并修改设置，须先取得用户许可。本次未运行安装。
+可使用 `pi install https://github.com/ymd-physics/pi-fairy`。
+Pi 会访问网络、安装依赖并修改设置，须先取得用户许可。不要未经许可代为执行。
 所有运行资源从包内相对路径解析，不应复制作者的机器路径。
 
 1. 只读盘点全局与项目 `packages`、`extensions`，包括自动发现的扩展；备份设置须获批。

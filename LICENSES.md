@@ -1,6 +1,6 @@
 # 许可范围 / License scope
 
-原创代码、测试、文档（包括 `modules/voice/` 与 `FAIRY-VOICE-PLAN.md`）由作者
+原创代码、测试、文档（包括 `modules/voice/`；历史语音设计文档的既有 MIT 授权不因省略而改变）由作者
 **ymd-physics** 确认为自己的原创作品，采用 [MIT](LICENSE)，Copyright (c) 2026 ymd-physics。
 这不是把第三方改编作品重新声明为原创，也不是语音素材的公开授权。
 
@@ -19,4 +19,4 @@
 
 历史说明：独立语音 0.2.29 的 `source-package.json` 没有 license 字段；这是保留的源元数据，
 不是当前原创语音代码/文档的授权阻碍。当前 MIT 来自作者明确授权，而非从缺失字段推断。
-该代码授权及作者收录音频的指示不等于第三方角色声音权利已获清理。发布检查见 [RELEASE-CHECKLIST](RELEASE-CHECKLIST.md)。
+该代码授权及作者收录音频的指示不等于第三方角色声音权利已获清理。使用与验证边界见 [PUBLIC-DISTRIBUTION](docs/PUBLIC-DISTRIBUTION.md)。
