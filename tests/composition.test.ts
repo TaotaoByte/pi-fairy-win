@@ -33,10 +33,14 @@ function harness(factory: typeof install, modeFlag: string | undefined = undefin
 		},
 		getFlag: () => modeFlag,
 		async exec(command: string, args: string[]) {
-			assert.ok(["afplay", "paplay", "aplay"].includes(command));
-			assert.ok(args[0].startsWith(fileURLToPath(new URL("../modules/voice/sounds/", import.meta.url))));
-			assert.equal(readFileSync(args[0]).toString("ascii", 0, 4), "RIFF");
-			plays.push(args[0]); // Never spawn an actual audio player.
+			assert.ok(["afplay", "paplay", "aplay", "powershell"].includes(command));
+			// Windows plays through PowerShell with the wav path embedded in -Command.
+			const wav = command === "powershell"
+				? (args.find((a) => a.includes(".wav")) ?? "").replace(/.*SoundPlayer\s+'/, "").replace(/'\).*$/, "")
+				: args[0];
+			assert.ok(wav.startsWith(fileURLToPath(new URL("../modules/voice/sounds/", import.meta.url))));
+			assert.equal(readFileSync(wav).toString("ascii", 0, 4), "RIFF");
+			plays.push(wav); // Never spawn an actual audio player.
 			return { code: 0, stdout: "", stderr: "" };
 		},
 	};

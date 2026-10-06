@@ -35,7 +35,7 @@ async function waitForWelcomeRecordings(
  assert.fail(`Welcome recorder observation timed out: ${JSON.stringify(diagnostic)}; evidence: ${diagnosticFile}`);
 }
 
-test("welcome recorder observation times out with diagnostics when no recorder result arrives", { timeout: 2000 }, async () => {
+test("welcome recorder observation times out with diagnostics when no recorder result arrives", { skip: process.platform !== "darwin", timeout: 2000 }, async () => {
  const root = await mkdtemp(evidence + "/absent-recorder-");
  const file = root + "/timeout.json";
  await assert.rejects(waitForWelcomeRecordings(async () => [], 1, 150, file, () => ({ fixture: "no recorder launched" })), /Welcome recorder observation timed out/);
@@ -44,7 +44,7 @@ test("welcome recorder observation times out with diagnostics when no recorder r
  assert.ok(diagnostic.elapsedMs >= 150); assert.deepEqual(diagnostic.records, []);
 });
 
-test("welcome control uses separate non-lease peers; old owner preserves main lease and no offline bypass", async () => {
+test("welcome control uses separate non-lease peers; old owner preserves main lease and no offline bypass", { skip: process.platform !== "darwin" }, async () => {
  const root = await mkdtemp(evidence + "/control-"); const peers: Socket[] = []; let offline = 0;
  const server = createServer(s => { peers.push(s); s.on("data", d => { if (d.toString() === "lease FAIRY2\n") s.write("FAIRY2 123\n"); else s.destroy(); }); });
  await new Promise<void>(r => server.listen(root + "/sock", r));
@@ -58,7 +58,7 @@ test("welcome control uses separate non-lease peers; old owner preserves main le
  await assert.rejects(welcomeSetting("full", { directory: async () => root, offline: async () => "simple" }), /未确认保存/);
 });
 
-test("production slash command reports saved choice/failure without enabling off desktop with obsolete CLI flag", async () => {
+test("production slash command reports saved choice/failure without enabling off desktop with obsolete CLI flag", { skip: process.platform !== "darwin" }, async () => {
  const root = await mkdtemp(evidence + "/command-");
  const entry = new URL("../src/index.ts", import.meta.url);
  const source = (await readFile(entry, "utf8")).replace(/from "(\.\/[^\"]+)"/g, (_all, path) => `from ${JSON.stringify(path === "./desktop/client.ts" ? root + "/client.mts" : new URL(path, entry).href)}`);

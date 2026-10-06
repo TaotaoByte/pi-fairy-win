@@ -237,12 +237,24 @@ export default function fairyExtension(pi: ExtensionAPI, options: FairyOptions =
 		const commands =
 			process.platform === "darwin"
 				? [{ command: "afplay", args: [path] }]
-				: process.platform === "linux"
+				: process.platform === "win32"
 					? [
-							{ command: "paplay", args: [path] },
-							{ command: "aplay", args: [path] },
+							{
+								command: "powershell",
+								args: [
+									"-NoProfile",
+									"-NonInteractive",
+									"-Command",
+									`(New-Object System.Media.SoundPlayer '${path.replace(/'/g, "''")}').PlaySync()`,
+								],
+							},
 						]
-					: [];
+					: process.platform === "linux"
+						? [
+								{ command: "paplay", args: [path] },
+								{ command: "aplay", args: [path] },
+							]
+						: [];
 		for (const { command, args } of commands) {
 			if (signal.aborted) return;
 			try {

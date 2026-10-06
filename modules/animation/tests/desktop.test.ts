@@ -14,7 +14,7 @@ test("desktop eligibility excludes every non-TUI and explicit subagent, not root
 	assert.equal(eligible("tui", { PI_SUBAGENT_PARENT_SESSION: "root" }), true);
 	assert.equal(eligible("tui", { PI_CODING_AGENT: "true" }), true);
 });
-test("desktop private directory refuses broad permissions and symlinks", async () => {
+test("desktop private directory refuses broad permissions and symlinks", { skip: process.platform !== "darwin" }, async () => {
 	const dir = await mkdtemp("/tmp/fairy-desktop-security-");
 	try {
 		assert.equal(await privateDirectory(dir), dir);
@@ -100,7 +100,7 @@ test("native desktop IPC: concurrent ownership, leases, crash, stale socket, rel
 });
 
 
-test("DesktopClient never launches on construction, preserves explicit theme, bounds crash reconnects", { timeout: 10_000 }, async () => {
+test("DesktopClient never launches on construction, preserves explicit theme, bounds crash reconnects", { skip: process.platform !== "darwin", timeout: 10_000 }, async () => {
  const dir = await mkdtemp("/tmp/fairy-desktop-client-");
  let launches = 0;
  const messages: string[] = [], received: string[] = [];
@@ -127,7 +127,7 @@ test("DesktopClient never launches on construction, preserves explicit theme, bo
  }
 });
 
-test("DesktopClient enforces elapsed deadline against a silent peer and closes connections", { timeout: 16_000 }, async () => {
+test("DesktopClient enforces elapsed deadline against a silent peer and closes connections", { skip: process.platform !== "darwin", timeout: 16_000 }, async () => {
  const dir = await mkdtemp("/tmp/fairy-desktop-deadline-");
  const peers = new Set<import("node:net").Socket>();
  const messages: string[] = []; let launches = 0;
@@ -152,7 +152,7 @@ test("DesktopClient enforces elapsed deadline against a silent peer and closes c
  }
 });
 
-test("DesktopClient reports build failure once, and dispose cancels pending first-use launch", async () => {
+test("DesktopClient reports build failure once, and dispose cancels pending first-use launch", { skip: process.platform !== "darwin" }, async () => {
  const dir = await mkdtemp("/tmp/fairy-desktop-cancel-");
  const messages: string[] = []; let launches = 0;
  const failed = new DesktopClient(m => messages.push(m), {
@@ -172,7 +172,7 @@ test("DesktopClient reports build failure once, and dispose cancels pending firs
 });
 
 
-test("DesktopClient refuses an incompatible live FAIRY1 owner without launching or unlinking", async () => {
+test("DesktopClient refuses an incompatible live FAIRY1 owner without launching or unlinking", { skip: process.platform !== "darwin" }, async () => {
  const dir = await mkdtemp("/tmp/fairy-desktop-version-");
  const peers: import("node:net").Socket[] = []; const messages: string[] = []; let launches = 0;
  const server = createServer(socket => { peers.push(socket); socket.on("error", () => {}); socket.resume(); socket.write("FAIRY1 123\n"); });

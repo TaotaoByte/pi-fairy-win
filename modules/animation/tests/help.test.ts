@@ -4,11 +4,13 @@ import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { openSync, fstatSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 async function fixture(platform = "darwin", startupLease?: { fd: number; token: string }) {
  const root = await mkdtemp(join(tmpdir(), "fairy-command-"));
+ const clientUrl = pathToFileURL(root + "/client.mts").href;
  const source = (await readFile(new URL("../src/index.ts", import.meta.url), "utf8"))
-  .replace('from "./desktop/client.ts"', `from ${JSON.stringify(root + "/client.mts")}`)
+  .replace('from "./desktop/client.ts"', `from ${JSON.stringify(clientUrl)}`)
   .replaceAll("process.platform", JSON.stringify(platform));
  await writeFile(root + "/entry.mts", source);
  await writeFile(root + "/client.mts", `
@@ -24,8 +26,8 @@ export class DesktopClient {
  setAppearance(value) { calls.push(['theme',value]); }
 }
 `);
- const client = await import(root + "/client.mts");
- const { default: install } = await import(root + "/entry.mts");
+ const client = await import(pathToFileURL(root + "/client.mts").href);
+ const { default: install } = await import(pathToFileURL(root + "/entry.mts").href);
  let command: any; const handlers = new Map<string, Function>(), flags = new Map<string, any>(), values = new Map();
  let reads = 0;
  install({ registerFlag(name: string, flag: any) { flags.set(name, flag); },
@@ -49,7 +51,8 @@ test("fairy-anim help is Chinese notify-only and preserves off/welcome without a
   assert.doesNotMatch(help, /theme|Kitty|mode auto|mode pixel|mode terminal/);
   assert.match(h.command.description, /桌面/);
   assert.doesNotMatch(h.command.description, /theme/);
-  assert.match(help, /自动跟随 macOS 系统外观/);
+  assert.match(help, /自动跟随系统外观/);
+  assert.match(help, /macOS\/Windows/);
   await h.command.handler("off", h.ctx);
   const before = structuredClone(h.calls);
   await h.command.handler("help", h.ctx); assert.deepEqual(h.calls, before);
@@ -104,13 +107,13 @@ test("fairy-anim exact Chinese welcome success/query/failure and invalid command
  } finally { await h.cleanup(); }
 });
 
-test("desktop-only nonmacOS explicitly unsupported; no terminal graphics or native attach", async () => {
+test("desktop-only nonmacOS/nonwin32 explicitly unsupported; no terminal graphics or native attach", async () => {
  const h = await fixture("linux");
  try {
   h.handlers.get("session_start")!({}, h.ctx);
-  assert.deepEqual(h.notes.at(-1), ["桌面 Fairy 仅支持 macOS；当前系统不支持，且无终端动画回退。Pi 和语音仍可使用。", "warning"]);
+  assert.deepEqual(h.notes.at(-1), ["桌面 Fairy 仅支持 macOS 与 Windows；当前系统不支持，且无终端动画回退。Pi 和语音仍可使用。", "warning"]);
   await h.command.handler("welcome full", h.ctx);
-  assert.deepEqual(h.notes.at(-1), ["桌面开场设置仅支持 macOS。", "warning"]);
+  assert.deepEqual(h.notes.at(-1), ["桌面开场设置仅支持 macOS 与 Windows。", "warning"]);
   for (const arg of ["on", "toggle", "toggle", "theme auto", "off"]) await h.command.handler(arg, h.ctx);
   assert.deepEqual(h.calls, []);
  } finally { await h.cleanup(); }

@@ -33,7 +33,7 @@ test("handoff metadata is consumed even when malformed; stdio/non-socket descrip
 // Inert, exclusively owned raw descriptors exercise cleanup before Socket adoption.
 // Actual socket adoption/claim remains covered by startup-entry.py's private Node/PTY suite.
 for (const mode of ["before-start", "pending-directory", "rejected-directory", "constructor-failure"] as const) {
- test(`DesktopClient closes unadopted startup fd: ${mode}`, { timeout: 3000 }, async () => {
+ test(`DesktopClient closes unadopted startup fd: ${mode}`, { skip: process.platform !== "darwin", timeout: 3000 }, async () => {
   const fd = openSync("/dev/null", "r");
   let replacement: number | undefined;
   let resolveDirectory!: (path: string) => void;
@@ -77,7 +77,7 @@ for (const mode of ["before-start", "pending-directory", "rejected-directory", "
  });
 }
 
-test("DesktopClient transfers the raw fd to Socket without later closing a reused descriptor", { timeout: 10_000 }, async () => {
+test("DesktopClient transfers the raw fd to Socket without later closing a reused descriptor", { skip: process.platform !== "darwin", timeout: 10_000 }, async () => {
  const source = new URL("../src/desktop/client.ts", import.meta.url).href;
  // Only the child owns fd 3; the parent owns the opposite socketpair endpoint.
  const child = spawn(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", `

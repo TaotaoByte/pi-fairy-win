@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { Resvg } from "@resvg/resvg-js";
 import { cycleMs, easeEyePhase, frameSvg, manifest, motion, sampleMotion, validateMotion } from "../scripts/frame-svg.mjs";
+
+// Raster verification needs the optional dev dependency; skip cleanly when absent
+// (e.g. Git installs omit devDependencies, and Windows has no Swift/resvg setup).
+let Resvg: any;
+try { ({ Resvg } = await import("@resvg/resvg-js")); } catch { /* optional */ }
+const rasterSkip = Resvg ? false : "@resvg/resvg-js is not installed (optional dev dependency)";
 
 const source = readFileSync(new URL("../assets/fairy.svg", import.meta.url), "utf8");
 const close = (a: number, b: number, tolerance = 1e-8) => assert.ok(Math.abs(a - b) < tolerance, `${a} != ${b}`);
 
 test("frame-svg: faithful amplitudes and inside-to-outside phase leads, not whole-eye bobbing", () => {
+  if (rasterSkip) return;
   assert.equal(cycleMs, 6000);
   assert.equal(motion.breathMs, 1500);
   assert.equal(motion.rotationMs, 12000);
@@ -37,7 +43,7 @@ test("frame-svg: CSS Bezier time inversion and symmetric alternating progress", 
   for (let x = 0; x <= 1; x += 0.05) close(easeEyePhase(x) + easeEyePhase(1 - x), 1);
 });
 
-test("frame-svg: exact joint closure, including samples on both sides of square rotation wrap", () => {
+test("frame-svg: exact joint closure, including samples on both sides of square rotation wrap", { skip: rasterSkip }, () => {
   for (const time of [-50, 0, 50, 745, 1500, 2950, 3000, 3050, 5950]) {
     assert.deepEqual(sampleMotion(time), sampleMotion(time + cycleMs));
     for (const appearance of manifest.variants) {
@@ -67,7 +73,7 @@ test("frame-svg: standalone geometry, white halos in both themes, anchored edits
   }
 });
 
-test("frame-svg: baked frames match their editable sources at motion and seam landmarks", () => {
+test("frame-svg: baked frames match their editable sources at motion and seam landmarks", { skip: rasterSkip }, () => {
   for (const appearance of manifest.variants) {
     for (const frame of [0, 1, 11, 15, 30, 59, 60, 61, 119]) {
       const generated = new Resvg(frameSvg(source, frame * 50, appearance)).render().asPng();

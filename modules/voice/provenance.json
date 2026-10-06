@@ -3,11 +3,12 @@
   "license": "Original code/docs: MIT, Copyright (c) 2026 ymd-physics. Bundled voice audio separately documented in ../../docs/AUDIO-PROVENANCE.md; no third-party rights grant inferred.",
   "integrationChanges": [
     "Desktop owns automatic lifecycle and rest cues",
-    "Process-local mute persistence, variant memory and retry cancellation"
+    "Process-local mute persistence, variant memory and retry cancellation",
+    "Windows playback path via PowerShell System.Media.SoundPlayer"
   ],
   "sha256": {
-    "fairy.ts": "4d7367734fb0113a88caf99986a0603a68a0bd82c30e643f71eea467c4acffdf",
-    "tests/fairy.test.ts": "8eff271e9b37b8a4345c082617668b6026e0dc016c2ecf2af1a45954cfa4a9d3",
+    "fairy.ts": "2868caea18a47d5f056076ec42fe3e3c46ffced0b96f5fdb69bd11254379ff0d",
+    "tests/fairy.test.ts": "e0f07e71ffafecf05de38967cb7541f0c912e3a8c64d6289cd59bd4db8fecfc5",
     "sounds/aborted.wav": "aaa18ac8219a8ab146a6c9ace82a37136e18208755e59c8fc64ca90ae6f78a80",
     "sounds/activity-1.wav": "0b19cb7844713273b9511b8b9b906b92f54aabcfec72b8ade5d4e7a0d7a7841d",
     "sounds/activity-2.wav": "c96eab6a0109f479ae216a33ba64cee8fded7c65d32b8f5e73ac0a11da11a336",

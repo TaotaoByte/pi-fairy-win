@@ -1,9 +1,20 @@
-# Fairy 动画模块 — 仅 macOS 桌面
+# Fairy 动画模块 — macOS 与 Windows 桌面
 
 集成版保留共享原生桌宠、完整/简洁开场、音效、全局大小/位置、自动系统外观和休息提醒。
-终端矢量/像素渲染及 Kitty/widget 实现已移除；非 macOS 明确不支持桌面，Pi 与语音仍可用。
+终端矢量/像素渲染及 Kitty/widget 实现已移除；其他系统明确不支持桌面，Pi 与语音仍可用。
 SVG 是可编辑美术源，不是已移除的终端后端；原生桌面继续使用全部 240 张 PNG。
 视觉适配归属见 [LICENSES.md](LICENSES.md)、[NOTICE](NOTICE)。
+
+## 平台实现
+
+- **macOS**：Swift/AppKit 进程 `native/Fairy.swift`，由 `/usr/bin/swiftc` 编译；
+  Unix socket 服务租约协议。下文“macOS 桌面运行方式”描述该实现。
+- **Windows**（本仓库新增移植）：C#/WPF 进程 `native/win/Fairy.cs`，由 .NET Framework 自带的
+  `csc.exe`（C# 5）编译缓存到 `%LOCALAPPDATA%\pi-fairy\Fairy-<hash>.exe`；
+  **命名管道**（`\\.\pipe\pi-fairy-<用户>`，管道名写在 `<目录>\pipe`）服务同一 FAIRY2 租约协议。
+  窗口为无边框透明 WPF Window，读取同一套 `assets/frames/{dark,light}/NNN.png`；
+  右键尺寸菜单、拖动保存位置与休息提醒行为对应 macOS 实现。生命周期音效经 PowerShell
+  `System.Media.SoundPlayer` 播放。开场提前入口（zsh prelude）仅 macOS 提供，Windows 无此功能。
 
 ## 命令
 
@@ -55,6 +66,7 @@ full 保留完整 HDD 开场 V1、SFX v4 和 welcome7；simple 为 2.4 秒中心
   排他锁覆盖 socket 清理/服务全生命周期，**退出不删除lock文件**。只有持锁者可回收
   拒绝连接的陈旧socket；活跃外来socket绝不删除。64连接上限、256字节缓冲限制，
   只接受具名theme行命令；EOF/错误释放连接，SIGKILL由内核释放锁。
+  （Windows 用命名管道 + 用户级目录替代：无 flock/socket，由系统对象命名空间与用户 SID 隔离。）
 
 ### 右键尺寸菜单（仅桌面）
 

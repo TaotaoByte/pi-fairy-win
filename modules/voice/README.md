@@ -6,6 +6,10 @@ by code MIT; see [audio provenance](../../docs/AUDIO-PROVENANCE.md).
 The following describes direct-module rules. Install only the root entry: integrated lifecycle/rest
 cues are owned by the desktop. See [public boundaries](../../docs/PUBLIC-DISTRIBUTION.md).
 
+Playback paths: macOS uses `afplay`, Windows uses PowerShell's
+`System.Media.SoundPlayer` (the bundled 32 kHz mono PCM16 WAVs are natively
+supported), Linux falls back to `paplay`/`aplay` (unverified).
+
 The module selects pre-generated static audio for the events listed below.
 
 The extension is observational only: it does not inject messages into context,

@@ -16,7 +16,7 @@
     "check:assets": "python3 modules/animation/tests/check-assets.py",
     "smoke:desktop": "node --experimental-strip-types modules/animation/tests/smoke-desktop.ts",
     "check:effects": "python3 modules/animation/tests/check-desktop-effects.py",
-    "test:public": "node --experimental-strip-types --test modules/animation/tests/help.test.ts modules/voice/tests/fairy.test.ts tests/composition.test.ts"
+    "test:public": "node --experimental-strip-types --test modules/animation/tests/help.test.ts modules/animation/tests/desktop-win.test.ts modules/voice/tests/fairy.test.ts tests/composition.test.ts"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
@@ -37,6 +37,7 @@
     "docs/*.md",
     "modules/animation/src/",
     "modules/animation/native/",
+    "modules/animation/native/win/",
     "modules/animation/assets/",
     "modules/animation/scripts/",
     "modules/animation/tests/*.ts",

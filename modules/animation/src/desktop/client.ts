@@ -1,31 +1,57 @@
 import { spawn, execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, lstat, readFile, rename, rm, access } from "node:fs/promises";
+import { mkdir, lstat, readFile, rename, rm, access, writeFile } from "node:fs/promises";
 import { closeSync, fstatSync } from "node:fs";
 import { createConnection, Socket } from "node:net";
+import { tmpdir, homedir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const run = promisify(execFile);
+const WINDOWS = process.platform === "win32";
+/** Windows leases are served over a named pipe; the pipe name is stored in <dir>/pipe. */
+export function pipePath(directory: string): string { return join(directory, "pipe"); }
+export async function readPipeName(directory: string): Promise<string> { return (await readFile(pipePath(directory), "utf8")).trim(); }
+export function namedPipeConnectPath(name: string): string { return `\\\\.\\pipe\\${name}`; }
+/** Named pipe / unix socket path used by connectLease and requestWelcome. */
+function leaseAddress(directory: string): Promise<string> {
+	return WINDOWS ? readPipeName(directory).then(namedPipeConnectPath) : Promise.resolve(directory + "/sock");
+}
 export function eligible(mode: string, env = process.env): boolean {
 	// pi-subagents child-runtime-config.ts documents CHILD; PARENT_SESSION is also set in roots.
 	return mode === "tui" && !env.PI_SUBAGENT_CHILD;
 }
-export async function privateDirectory(path = `/tmp/pi-fairy-${process.getuid!()}`): Promise<string> {
-	await mkdir(path, { mode: 0o700 }).catch((error) => { if (error.code !== "EEXIST") throw error; });
-	const stat = await lstat(path);
-	if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid!() || (stat.mode & 0o077)) throw new Error(`Fairy 目录不安全（必须由当前用户拥有且权限为 0700）： ${path}`);
-	return path;
+export async function privateDirectory(path?: string): Promise<string> {
+	if (WINDOWS) {
+		// %LOCALAPPDATA%\pi-fairy (per-user, ACL-protected by the OS).
+		const base = process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local");
+		const directory = path ?? join(base, "pi-fairy");
+		await mkdir(directory, { recursive: true });
+		if (!(await lstat(directory)).isDirectory()) throw new Error(`Fairy 目录不安全： ${directory}`);
+		return directory;
+	}
+	const unixPath = path ?? `/tmp/pi-fairy-${process.getuid!()}`;
+	await mkdir(unixPath, { mode: 0o700 }).catch((error) => { if (error.code !== "EEXIST") throw error; });
+	const stat = await lstat(unixPath);
+	if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid!() || (stat.mode & 0o077)) throw new Error(`Fairy 目录不安全（必须由当前用户拥有且权限为 0700）： ${unixPath}`);
+	return unixPath;
 }
 const building = new Map<string, Promise<string>>();
 export async function cachedNativePath(name: "Fairy" | "Startup", directory: string): Promise<string> {
+	if (WINDOWS) {
+		const source = await readFile(root + `native/win/${name}.cs`, "utf8").catch(() => readFile(root + `native/win/Fairy.cs`, "utf8"));
+		const hash = createHash("sha256").update(source).update(process.arch).digest("hex").slice(0, 16);
+		return `${directory}\\${name}-${hash}.exe`;
+	}
 	const hash = createHash("sha256").update(await readFile(root + `native/${name}.swift`)).update(process.arch).digest("hex").slice(0, 16);
 	return `${directory}/${name}-${hash}`;
 }
 export function buildHelper(name: "Fairy" | "Startup" = "Fairy"): Promise<string> {
 	if (building.has(name)) return building.get(name)!;
 	const promise = (async () => {
+		if (WINDOWS) return buildWindowsHelper(directory => directory);
 		if (process.platform !== "darwin") throw new Error("桌面 Fairy 仅支持 macOS");
 		const directory = await privateDirectory();
 		const source = root + `native/${name}.swift`;
@@ -39,6 +65,28 @@ export function buildHelper(name: "Fairy" | "Startup" = "Fairy"): Promise<string
 		} finally { await rm(temp, { force: true }); }
 	})();
 	building.set(name, promise); return promise;
+}
+/** Windows: compile native/win/Fairy.cs with the .NET Framework csc.exe (C# 5, no SDK). */
+async function buildWindowsHelper(directory: (dir: string) => string): Promise<string> {
+	const dir = await privateDirectory();
+	const source = root + `native/win/Fairy.cs`;
+	const sourceWin = source.replace(/\//g, "\\");
+	const binary = await cachedNativePath("Fairy", dir);
+	try { await access(binary); return binary; } catch {}
+	const framework = process.env.WINDIR ? `${process.env.WINDIR}\\Microsoft.NET\\Framework64\\v4.0.30319` : "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319";
+	const csc = `${framework}\\csc.exe`;
+	const wpf = `${framework}\\WPF`;
+	try { await access(csc); } catch { throw new Error("桌面 Fairy 需要 .NET Framework 4.x（未找到 csc.exe）：" + csc); }
+	const temp = `${binary}-${randomUUID()}.exe`;
+	try {
+		await run(csc, [
+			"-nologo", "-target:winexe", `-out:${temp}`,
+			`-r:${wpf}\\WindowsBase.dll`, `-r:${wpf}\\PresentationCore.dll`, `-r:${wpf}\\PresentationFramework.dll`,
+			`-r:${framework}\\System.Xaml.dll`, sourceWin,
+		], { timeout: 120_000, maxBuffer: 128 * 1024, windowsHide: true });
+		await rename(temp, binary); // Concurrent builds publish only complete executables.
+		return binary;
+	} finally { await rm(temp, { force: true }); }
 }
 export interface StartupLease { fd: number; token: string }
 export function consumeStartupLease(env = process.env): StartupLease | undefined {
@@ -115,9 +163,9 @@ export async function welcomeSetting(mode?: WelcomeMode, runtime = {
 	},
 }): Promise<WelcomeMode> {
 	const directory = await runtime.directory();
-	try { return await requestWelcome(directory + "/sock", mode); }
+	try { return await requestWelcome(await leaseAddress(directory), mode); }
 	catch (error) {
-		if (!["ENOENT", "ECONNREFUSED"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
+		if (!["ENOENT", "ECONNREFUSED", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
 	}
 	// The command owns the same nonblocking flock; a racing owner fails honestly.
 	const result = await runtime.offline(directory, mode);
@@ -136,9 +184,19 @@ const desktopRuntime: DesktopRuntime = {
 	async launch(directory, stillWanted, lifecycleSoundsDirectory) {
 		const binary = await buildHelper();
 		if (!stillWanted()) return;
-		const child = spawn(binary, desktopLaunchArguments(directory, lifecycleSoundsDirectory), { detached: true, stdio: "ignore", env: { HOME: process.env.HOME, PATH: "/usr/bin:/bin" } });
+		const env = WINDOWS
+			? { ...process.env, WINDIR: process.env.WINDIR, SystemRoot: process.env.SystemRoot }
+			: { HOME: process.env.HOME, PATH: "/usr/bin:/bin" };
+		const child = spawn(binary, desktopLaunchArguments(directory, lifecycleSoundsDirectory), { detached: true, stdio: "ignore", env, windowsHide: WINDOWS });
 		await new Promise<void>((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
 		child.unref();
+		if (WINDOWS) {
+			// The named-pipe name is published by the helper on startup; wait briefly.
+			const deadline = performance.now() + 3000;
+			while (performance.now() < deadline) {
+				try { await access(pipePath(directory)); break; } catch { await new Promise((r) => setTimeout(r, 100)); }
+			}
+		}
 	},
 };
 export class DesktopClient {
@@ -182,7 +240,7 @@ export class DesktopClient {
 						try { socket = await claimStartupLease(this.claiming, startup.token); }
 						catch { if (this.closed) return; continue; }
 						finally { this.claiming = undefined; }
-					} else socket = await connectLease(directory + "/sock", Math.max(1, Math.min(1000, deadline - performance.now())));
+					} else socket = await connectLease(await leaseAddress(directory), Math.max(1, Math.min(1000, deadline - performance.now())));
 					if (this.closed) { socket.destroy(); return; }
 					this.socket = socket;
 					if (this.theme) socket.write(`theme ${this.theme}\n`);
@@ -217,7 +275,7 @@ export class DesktopClient {
 			if (!this.closed) throw new Error("桌面辅助进程在 10 秒内未接受连接");
 		} catch (error) {
 			this.discardStartupLease();
-			if (!this.closed) this.notify(`桌面 Fairy 不可用：${String(error)}。请先 /fairy-anim off 再 /fairy-anim on 重试；检查 Swift/Xcode SDK：xcrun --show-sdk-path。`);
+			if (!this.closed) this.notify(`桌面 Fairy 不可用：${String(error)}。请先 /fairy-anim off 再 /fairy-anim on 重试；检查 ${WINDOWS ? ".NET Framework 4.x（csc.exe）" : "Swift/Xcode SDK：xcrun --show-sdk-path"}。`);
 		} finally { this.pending = false; }
 	}
 }

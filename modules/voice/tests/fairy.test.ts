@@ -48,8 +48,17 @@ function harness(options: Record<string, unknown> = {}) {
 			commands.set(name, command);
 		},
 		async exec(command: string, args: string[], execOptions: { signal?: AbortSignal } = {}) {
-			if (command === "afplay") {
-				const name = args[0]!.split("/").at(-1)!;
+			// macOS/iOS player is afplay; the Windows port plays through PowerShell's
+			// SoundPlayer, with the wav path embedded in the -Command argument.
+			const isPlayer = command === "afplay" || command === "powershell" || command === "paplay" || command === "aplay";
+			if (isPlayer) {
+				const raw = command === "powershell"
+					? (args.find((a) => a.includes(".wav")) ?? "")
+					: (args[0] ?? "");
+				const cleaned = raw.replace(/['"]/g, "");
+				const cut = cleaned.lastIndexOf(".wav");
+				const tail = cut >= 0 ? cleaned.slice(0, cut) : cleaned;
+				const name = tail.slice(Math.max(tail.lastIndexOf("/"), tail.lastIndexOf("\\")) + 1) + ".wav";
 				const delay = options.execDelayMs;
 				if (typeof delay === "number" && delay > 0) {
 					await new Promise<void>((resolve, reject) => {
@@ -222,7 +231,7 @@ test("falls back to the remaining goodbye variants when files are missing", asyn
 test("plays a random stretch reminder each interval without repeating", async () => {
 	const h = harness({ activityIntervalMs: 15, random: () => 0.9 });
 	h.emit("session_start");
-	await new Promise((resolve) => setTimeout(resolve, 45));
+	await new Promise((resolve) => setTimeout(resolve, 90));
 	assert.deepEqual(h.plays.slice(0, 2), ["activity-3.wav", "activity-1.wav"]);
 });
 
@@ -583,7 +592,7 @@ test("muted /fairy-voice test activity plays nothing and opens no dialog", async
 
 
 test("automaticLifecycleCues false keeps session sounds, explicit tests and shutdown cleanup", async () => {
- const h = harness({ automaticLifecycleCues: false, activityIntervalMs: 30, taskStartDelayMs: 20 });
+ const h = harness({ automaticLifecycleCues: false, activityIntervalMs: 30_000, taskStartDelayMs: 20 });
  h.emit("session_start", { reason: "startup" });
  await h.flush(); assert.deepEqual(h.plays, []);
  for (const [reason, sound] of [["resume", "session-switch.wav"], ["new", "new-session.wav"]]) {
@@ -724,7 +733,7 @@ test("a genuinely fresh Node process starts integrated voice unmuted with only a
    exec: async () => { plays++; return { code: 0 }; }
   }, { processMute: true, automaticLifecycleCues: false, fileExists: () => true, taskStartDelayMs: 0 });
   handlers.get('before_agent_start')();
-  assert.equal(plays, process.platform === 'darwin' || process.platform === 'linux' ? 1 : 0);
+  assert.equal(plays, process.platform === 'darwin' || process.platform === 'linux' || process.platform === 'win32' ? 1 : 0);
   handlers.get('session_shutdown')({ reason: 'reload' });
  `], { encoding: "utf8", timeout: 5000 });
  assert.equal(child.status, 0, child.stderr);

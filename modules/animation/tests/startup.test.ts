@@ -5,7 +5,7 @@ import { createServer, type Socket } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { DesktopClient } from "../src/desktop/client.ts";
 
-test("DesktopClient retries immediately after slow preparation with a ready listener", { timeout: 5000 }, async t => {
+test("DesktopClient retries immediately after slow preparation with a ready listener", { skip: process.platform !== "darwin", timeout: 5000 }, async t => {
  const dir = await mkdtemp("/tmp/fairy-startup-client-");
  const peers: Socket[] = []; let launches = 0, greeted = false;
  const server = createServer(socket => {
@@ -32,7 +32,7 @@ test("DesktopClient retries immediately after slow preparation with a ready list
  }
 });
 
-test("DesktopClient retains backoff when launched helper is not listening yet", { timeout: 5000 }, async () => {
+test("DesktopClient retains backoff when launched helper is not listening yet", { skip: process.platform !== "darwin", timeout: 5000 }, async () => {
  const dir = await mkdtemp("/tmp/fairy-startup-delayed-");
  const peers: Socket[] = []; let launches = 0, greeted = false;
  const server = createServer(socket => { peers.push(socket); socket.on("data", () => { greeted = true; socket.write("FAIRY2 123\n"); }); });
