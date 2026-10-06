@@ -4,7 +4,7 @@
 
 > **包含全部 44 个语音模块 WAV**（含两段电子权限提示音），安装后无需本地模型或另行下载声音。原创代码/文档采用 MIT；Apache 视觉适配与合成语音另有边界，见 [许可证与素材说明](LICENSES.md) 和 [音频来源](docs/AUDIO-PROVENANCE.md)。资源完整不等于本机已通过真实音画测试。
 >
-> 仓库：<https://github.com/ymd-physics/pi-fairy>。
+> 仓库：<https://github.com/TaotaoByte/pi-fairy-win>（Windows 移植分支，原仓库 <https://github.com/ymd-physics/pi-fairy>）。
 
 ## 平台与依赖
 
@@ -18,6 +18,22 @@
 
 ## 安装
 
+### Windows（本移植分支）
+
+```sh
+pi install https://github.com/TaotaoByte/pi-fairy-win
+```
+
+或使用本地路径安装（改动源码后即时生效，推荐开发时使用）：
+
+```sh
+pi install ./pi-fairy
+```
+
+**Windows 提示**：安装后首次启用桌面时会用系统自带的 `csc.exe` 编译 C# 桌面程序（约 1–2 秒，仅第一次）。需要 .NET Framework 4.x（Windows 10/11 自带）。若失败，请检查 `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe` 是否存在。无需安装 Visual Studio、.NET SDK 或 Swift。
+
+### macOS（原分支）
+
 先读源码与许可证，并核对本机 Pi 的 `docs/packages.md`。Pi 0.85.1 的 Git 安装语法：
 
 ```sh
@@ -26,14 +42,12 @@ pi install https://github.com/ymd-physics/pi-fairy
 
 这会使用网络，默认更改用户级 Pi 设置，并可能运行 npm 安装依赖；加 `-l` 是项目级设置，不应擅自选择。Git 安装默认省略开发依赖（自定义 `npmCommand` 时可能不同）。建议使用已存在的 tag/commit：在 URL 后加 `@实际发布引用`，不要把示意引用当成已存在版本。
 
-**Windows 提示**：安装后首次 `/fairy-anim on` 会编译 C# 桌面程序。需要 .NET Framework 4.x（Windows 10/11 自带）。若失败，请检查 `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe` 是否存在。
-
 不要同时加载集成版、旧 `pi-fairy-animation`、独立 `pi-fairy-voice` 或内部模块入口。同一代码的不同副本不会按内容去重。迁移须先查看现有包和用户意图，仅定点替换获批条目，保留其他插件、设置和旧副本以便回滚。详见 [迁移](docs/INTEGRATION.md)。
 
 ### 给安装 Agent 的提示词
 
 ```text
-请帮用户安装 https://github.com/ymd-physics/pi-fairy。
+请帮用户安装 https://github.com/TaotaoByte/pi-fairy-win（Windows 移植分支）。
 
 先检查操作系统和架构。当前桌宠支持 macOS 与 Windows；
 其他系统不支持桌面（无终端动画回退），说明兼容性限制并停止安装。
@@ -55,6 +69,69 @@ pi install https://github.com/ymd-physics/pi-fairy
 最后给出启动、常用命令、更新和卸载方法，并请用户确认实际画面与声音。
 ```
 
+## 日常使用
+
+### 自动行为（无需干预）
+
+正常打开交互式 Pi（TUI）时插件会自动：
+
+- 显示桌面 Fairy 并播放待机动画；
+- 在任务开始/完成/出错/网络重试、权限请求与批准/拒绝、输入等待、压缩开始与完成、上下文越过 80%、额度越过 10% 等事件播放对应语音；
+- 运行满 1 小时弹出休息提醒（稍后 5 分钟 / 去休息 1 小时）；
+- 退出时播放告别音。
+
+### 命令
+
+| 命令 | 作用 |
+| --- | --- |
+| `/fairy-anim help` | 中文只读帮助 |
+| `/fairy-anim on` / `off` / `toggle` | 开关本 Pi 的桌面连接（不关闭其他 Pi 持有的共享桌面） |
+| `/fairy-anim welcome` | 查询已保存的开场选择 |
+| `/fairy-anim welcome full` / `simple` | 保存下一次新共享桌面生命周期的开场模式 |
+| `/fairy-voice help` | 中文只读语音帮助 |
+| `/fairy-voice list` | 列出可试听的声音名称 |
+| `/fairy-voice test <sound>` | 试听某个声音（如 `success`、`permission`） |
+| `/fairy-voice off` / `on` | 静音/恢复本 Pi 语音（播放开关确认音） |
+| `/fairy-voice status` | 查询本进程静音状态 |
+
+### 鼠标操作
+
+- **左键拖动** Fairy 移动位置，完成后自动保存；下次开场回到该位置。
+- **右键** 打开 5 档大小菜单（xsmall / small / standard / large / xlarge），选择后全局保存。
+- 桌宠窗口不抢键盘焦点，不影响正常打字。
+
+### 设置与缓存位置
+
+- 桌面设置（大小/位置/开场）：`%LOCALAPPDATA%\pi-fairy\settings.json`（macOS 为 `~/Library/Application Support/pi-fairy-animation/settings.json`）
+- 编译后的桌面程序：`%LOCALAPPDATA%\pi-fairy\Fairy-<hash>.exe`
+- 命名管道名：`%LOCALAPPDATA%\pi-fairy\pipe`
+
+### 更新与卸载
+
+```sh
+# 更新扩展（使用 Git 安装时）
+pi update --extensions
+
+# 卸载
+pi remove https://github.com/TaotaoByte/pi-fairy-win
+# 或本地路径安装时：
+pi remove ./pi-fairy
+```
+
+改动了 C# 桌面源码（`modules/animation/native/win/Fairy.cs`）后，需先退出所有 Pi，再删除编译缓存以触发重新编译：
+
+```sh
+# Windows（PowerShell / cmd）
+rmdir /s /q "%LOCALAPPDATA%\pi-fairy"
+```
+
+### 常见问题
+
+- **桌宠不显示**：确认在交互式 TUI 中（`pi -p "..."` 等非 TUI 模式不显示桌面，但语音仍会响）；先看 `/fairy-anim help`，再检查 `%LOCALAPPDATA%\pi-fairy\` 是否有 `Fairy-*.exe`。
+- **首次启用卡顿**：首次会调用 `csc.exe` 编译约 1–2 秒，属正常；之后使用缓存。
+- **没有声音**：确认 `/fairy-voice status` 未静音；Windows 经 PowerShell `System.Media.SoundPlayer` 播放，若 PowerShell 执行策略受限请检查策略。
+- **共享声音关不掉**：欢迎/告别/休息提醒由桌面 owner 统一播放，`/fairy-voice off` 不影响它们（设计如此）。
+
 ## 使用与行为边界
 
 - `/fairy-anim help`、`/fairy-voice help`：中文只读帮助，不播放声音或启动桌面。
@@ -74,7 +151,7 @@ pi install https://github.com/ymd-physics/pi-fairy
 npm run test:public
 ```
 
-该命令只用静态检查及 mock，不安装依赖、不启动桌面/播放器。原生测试需 Swift/SDK，光栅化测试需开发依赖；全量测试需要另行准备环境；测试范围见 [发行说明](docs/PUBLIC-DISTRIBUTION.md)。
+该命令只用静态检查及 mock，不安装依赖、不启动桌面/播放器。Windows 上 POSIX 专属测试（unix socket、fd 传递、`/tmp`、Swift）自动跳过，新增的 `desktop-win.test.ts` 覆盖命名管道协议与 C# 编译。原生测试需 Swift/SDK，光栅化测试需开发依赖；全量测试需要另行准备环境；测试范围见 [发行说明](docs/PUBLIC-DISTRIBUTION.md)。
 
 [LICENSE](LICENSE) 授权 ymd-physics 的原创代码、测试和文档（含语音模块）为 MIT，Copyright 2026 ymd-physics。[LICENSES.md](LICENSES.md) 区分原创与改编：Chengzhibense/Fairy-DSH 的 Apache-2.0 改编图形保留原 NOTICE、源提交和修改说明。两种代码许可都不转授游戏角色、商标、合成声音或模型权利。原创程序合成开场 SFX 保留，非游戏采样。
 
