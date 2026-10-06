@@ -16,6 +16,7 @@ using System.IO;
 using System.IO.Pipes;
 using System.Linq;
 using System.Media;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Windows;
@@ -27,6 +28,29 @@ using System.Windows.Threading;
 
 namespace PiFairy
 {
+    /// <summary>
+    /// Physical screen cursor position. Used for dragging instead of
+    /// MouseEventArgs.GetPosition, whose coordinates are relative to the
+    /// captured element: moving the window while it captures the mouse feeds
+    /// each move delta back into the next GetPosition call and makes the pet
+    /// jitter. Screen coordinates do not depend on the window position.
+    /// </summary>
+    internal static class Cursor
+    {
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT { public int X; public int Y; }
+
+        [DllImport("user32.dll")]
+        private static extern bool GetCursorPos(out POINT point);
+
+        public static Point Position()
+        {
+            POINT p;
+            if (GetCursorPos(out p)) return new Point(p.X, p.Y);
+            return new Point(0, 0);
+        }
+    }
+
     internal static class Program
     {
         internal static string Directory;
@@ -50,6 +74,8 @@ namespace PiFairy
 
             LifecycleSounds = Option(list, "--lifecycle-sounds");
             IntroSfx = Option(list, "--intro-sfx");
+
+            if (list.Contains("--self-test")) return RunSelfTest();
 
             int wc = list.IndexOf("--welcome-setting");
             if (wc >= 0)
@@ -99,6 +125,81 @@ namespace PiFairy
             return 0;
         }
 
+        /// <summary>
+        /// Deterministic checks for the pointer-independent drag math and the
+        /// ripple visibility window. Runs without creating any window, so it is
+        /// safe in CI and does not need a desktop session.
+        /// </summary>
+        static int RunSelfTest()
+        {
+            int failures = 0;
+            Action<bool, string> check = delegate(bool ok, string name)
+            {
+                Console.WriteLine((ok ? "PASS " : "FAIL ") + name);
+                if (!ok) failures++;
+            };
+
+            // Drag from a fixed screen anchor must map 1:1 to window movement,
+            // regardless of the window's current position (the old bug re-read
+            // GetPosition against the moving window and oscillated).
+            double startLeft = 500, startTop = 300;
+            Point origin = new Point(1000, 800);
+            bool exact = true, monotonic = true;
+            double prevL = startLeft, prevT = startTop;
+            for (int step = 1; step <= 40; step++)
+            {
+                Point now = new Point(1000 + step * 7, 800 + step * 3);
+                double left = startLeft + (now.X - origin.X);
+                double top = startTop + (now.Y - origin.Y);
+                if (left != startLeft + step * 7 || top != startTop + step * 3) exact = false;
+                if (left < prevL || top < prevT) monotonic = false;
+                prevL = left; prevT = top;
+            }
+            check(exact, "drag tracks the screen cursor 1:1");
+            check(monotonic, "drag is monotonic (no oscillation)");
+
+            // Ripple visibility window must cover roughly the first third of the cycle.
+            int visibleTicks = 0, total = 1280;
+            for (int i = 0; i < total; i++)
+            {
+                double value = i * 0.05;
+                double age = (value - 1) % 6.4;
+                bool visible = false;
+                for (int r = 0; r < 3; r++)
+                {
+                    double p = (age - r * 0.26) / 1.8;
+                    if (p > 0 && p < 1) { visible = true; break; }
+                }
+                if (visible) visibleTicks++;
+            }
+            double ratio = (double)visibleTicks / total;
+            check(ratio > 0.3 && ratio < 0.55, "ripple repaint window is bounded (ratio " + ratio.ToString("0.00") + ")");
+
+            // Preferences round-trip and malformed input fall back to defaults.
+            // Use the process temp dir; a restricted sandbox may deny writes
+            // there, in which case the check is skipped rather than failed.
+            string dir = Path.Combine(Path.GetTempPath(), "fairy-selftest-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                System.IO.Directory.CreateDirectory(dir);
+                Prefs prefs = new Prefs(dir);
+                check(prefs.Size() == FairySize.standard && prefs.Welcome == "full", "settings default to standard/full");
+                prefs.SaveSize(FairySize.xlarge);
+                prefs.SaveWelcome("simple");
+                prefs.SavePosition(new SavedPosition { Display = "primary", X = 0.25, Y = 0.75 });
+                Prefs reread = new Prefs(dir);
+                check(reread.Size() == FairySize.xlarge && reread.Welcome == "simple", "settings round-trip");
+                SavedPosition p = reread.Read().Position;
+                check(p != null && Math.Abs(p.X - 0.25) < 1e-9 && Math.Abs(p.Y - 0.75) < 1e-9, "position round-trip");
+            }
+            catch (UnauthorizedAccessException) { Console.WriteLine("SKIP preferences round-trip (temp dir not writable in this sandbox)"); }
+            catch (IOException) { Console.WriteLine("SKIP preferences round-trip (temp dir not writable in this sandbox)"); }
+            finally { try { System.IO.Directory.Delete(dir, true); } catch { } }
+
+            Console.WriteLine(failures == 0 ? "SELFTEST PASS" : "SELFTEST FAIL " + failures);
+            return failures == 0 ? 0 : 1;
+        }
+
         static string Option(List<string> list, string name)
         {
             int i = list.IndexOf(name);
@@ -117,6 +218,21 @@ namespace PiFairy
         internal static void Log(string text)
         {
             Console.Error.WriteLine("Fairy: " + text);
+        }
+
+        /// <summary>Best-effort diagnostic log next to the settings file.</summary>
+        internal static void DebugFile(string text)
+        {
+            if (string.IsNullOrEmpty(Directory)) return;
+            try
+            {
+                string path = Path.Combine(Directory, "debug.log");
+                FileInfo info = new FileInfo(path);
+                if (info.Exists && info.Length > 64 * 1024) File.Delete(path); // keep it bounded
+                File.AppendAllText(path,
+                    DateTime.Now.ToString("HH:mm:ss.fff") + " " + text + Environment.NewLine);
+            }
+            catch { }
         }
 
         static int RunWelcomeSetting()
@@ -375,6 +491,13 @@ namespace PiFairy
         readonly string _directory;
         readonly DesktopHost _host;
         volatile bool _stopped;
+        Mutex _instance;
+        static Mutex _held;
+        int _leases;
+        readonly object _leaseLock = new object();
+
+        /// <summary>Seconds with no lease before the shared owner retires.</summary>
+        const int GraceSeconds = 3;
 
         public string PipeName { get; private set; }
 
@@ -390,6 +513,19 @@ namespace PiFairy
         public void Start()
         {
             System.IO.Directory.CreateDirectory(_directory);
+            // Single owner, the Windows equivalent of the macOS flock: a named
+            // mutex is user-scoped and released by the OS if the process dies, so
+            // a stale helper can never block a new one. A second live helper that
+            // cannot own the mutex exits instead of showing a duplicate pet.
+            bool createdNew;
+            _instance = new Mutex(true, "Local\\" + PipeName, out createdNew);
+            if (!createdNew)
+            {
+                // Another owner exists; let it serve and step aside.
+                Program.Log("another Fairy owner is running; exiting");
+                Environment.Exit(0);
+            }
+            _held = _instance;
             try { File.WriteAllText(Path.Combine(_directory, "pipe"), PipeName); }
             catch (Exception e) { Program.Log("pipe file FAILED: " + e.Message); }
             Thread thread = new Thread(AcceptLoop);
@@ -437,6 +573,7 @@ namespace PiFairy
         {
             StringBuilder input = new StringBuilder();
             byte[] buffer = new byte[256];
+            bool leased = false;
             try
             {
                 while (true)
@@ -454,6 +591,9 @@ namespace PiFairy
                         {
                             if (!SendLine(s, "FAIRY2 " + Process.GetCurrentProcess().Id))
                             { s.Close(); return; }
+                            leased = true;
+                            lock (_leaseLock) _leases++;
+                            Program.DebugFile("lease acquired; active=" + LeaseCount);
                             if (_host != null) _host.OnLeaseAcquired();
                         }
                         else if (line == "welcome FAIRY2" || line == "welcome FAIRY2 full" || line == "welcome FAIRY2 simple")
@@ -480,8 +620,21 @@ namespace PiFairy
                 }
             }
             catch (Exception) { }
-            finally { try { s.Close(); } catch { } }
+            finally
+            {
+                try { s.Close(); } catch { }
+                if (leased)
+                {
+                    lock (_leaseLock) _leases--;
+                    Program.DebugFile("lease released; active=" + LeaseCount);
+                    // The last lease closing starts the shared goodbye; the host
+                    // clamps and then exits, so a stale pet never outlives Pi.
+                    if (LeaseCount == 0 && _host != null) _host.OnAllLeasesClosed();
+                }
+            }
         }
+
+        public int LeaseCount { get { lock (_leaseLock) return _leases; } }
 
         public void Stop()
         {
@@ -511,7 +664,9 @@ namespace PiFairy
         Window _menu;
         Window _restPrompt;
         bool _dragging;
-        Point _dragOffset;
+        Point _dragOrigin;   // screen cursor position at drag start
+        double _dragLeft;    // window Left/Top at drag start
+        double _dragTop;
         bool _leaseSeen;
 
         string _theme = "auto";
@@ -532,12 +687,20 @@ namespace PiFairy
             _size = _prefs.Size();
         }
 
-        public void SetTheme(string t) { _theme = t; }
+        public void SetTheme(string t) { _theme = t; _themeResolved = null; }
+
+        // Registry/DWM reads are not free; the 50ms animation timer must not poll
+        // them. Cache the resolved appearance and refresh at most twice a second.
+        bool? _themeResolved;
+        int _themeTicks;
 
         bool Dark()
         {
             if (_theme == "dark") return true;
             if (_theme == "light") return false;
+            if (_themeResolved.HasValue && _themeTicks < 10) { _themeTicks++; return _themeResolved.Value; }
+            _themeTicks = 0;
+            bool dark = false;
             try
             {
                 Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
@@ -547,12 +710,13 @@ namespace PiFairy
                     using (key)
                     {
                         object v = key.GetValue("AppsUseLightTheme");
-                        if (v != null && Convert.ToInt32(v) == 0) return true;
+                        if (v != null && Convert.ToInt32(v) == 0) dark = true;
                     }
                 }
             }
             catch { }
-            return false;
+            _themeResolved = dark;
+            return dark;
         }
 
         void LoadFrames()
@@ -580,17 +744,17 @@ namespace PiFairy
         {
             LoadFrames();
 
-            Rect screen = new Rect(0, 0, SystemParameters.PrimaryScreenWidth, SystemParameters.PrimaryScreenHeight);
-            double side = Math.Min(_size.Points(), Math.Min(screen.Width, screen.Height));
+            double side = Math.Min(_size.Points(), Math.Min(
+                SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight));
 
-            double ix = screen.Left + screen.Width * 0.8 - side / 2;
-            double iy = screen.Bottom - screen.Height / 3 - side / 2;
+            double ix = SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth * 0.8 - side / 2;
+            double iy = SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight / 3 - side / 2;
 
             SavedPosition sp = _prefs.Read().Position;
             if (sp != null && sp.Valid)
             {
-                ix = screen.Left + screen.Width * sp.X - side / 2;
-                iy = screen.Top + screen.Height * sp.Y - side / 2;
+                ix = SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth * sp.X - side / 2;
+                iy = SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight * sp.Y - side / 2;
             }
 
             _pet = CreateWindow(side, side, ix, iy);
@@ -601,6 +765,7 @@ namespace PiFairy
             _pet.Content = _petImage;
             AttachDrag(_pet);
             _pet.Show();
+            ClampPetToScreen();
 
             double es = side * 1.8;
             _effectPanel = CreateWindow(es, es, ix - side * 0.4, iy - side * 0.4);
@@ -609,7 +774,14 @@ namespace PiFairy
             _ripple.Height = es;
             _effectPanel.Content = _ripple;
             _effectPanel.IsHitTestVisible = false;
+            // Own the effect window so it always stays below the pet and never
+            // becomes active. A sibling topmost window would sit above the pet
+            // and swallow drag/right-click input meant for it.
+            _effectPanel.Owner = _pet;
             _effectPanel.Show();
+            ClickThrough(_effectPanel);
+            _pet.Activate();
+            _pet.Topmost = true;
 
             LeaseServer server = new LeaseServer(Program.Directory, this);
             server.Start();
@@ -666,37 +838,101 @@ namespace PiFairy
             if (_ripple != null) { _ripple.Width = w; _ripple.Height = h; }
         }
 
+        /// <summary>
+        /// Make a window transparent to mouse input at the OS level with
+        /// WS_EX_TRANSPARENT, so clicks pass through to the pet beneath it.
+        /// WPF's IsHitTestVisible only affects WPF-internal hit testing.
+        /// </summary>
+        void ClickThrough(Window win)
+        {
+            try
+            {
+                IntPtr hwnd = new System.Windows.Interop.WindowInteropHelper(win).Handle;
+                int ex = GetWindowLong(hwnd, GWL_EXSTYLE);
+                SetWindowLong(hwnd, GWL_EXSTYLE, ex | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE);
+            }
+            catch (Exception) { }
+        }
+
+        const int GWL_EXSTYLE = -20;
+        const int WS_EX_TRANSPARENT = 0x20;
+        const int WS_EX_NOACTIVATE = 0x08000000;
+        [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+        [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
         void AttachDrag(Window win)
         {
             win.MouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e)
             {
+                if (e.ChangedButton != MouseButton.Left) return;
                 _dragging = true;
-                _dragOffset = e.GetPosition(win);
-                if (e.Source is UIElement) ((UIElement)e.Source).CaptureMouse();
+                // Anchor on an absolute screen point + the window origin at drag
+                // start. Every move re-derives the frame from those two fixed
+                // values, so it can never feed back on itself (unlike GetPosition).
+                _dragOrigin = Cursor.Position();
+                _dragLeft = win.Left;
+                _dragTop = win.Top;
+                win.CaptureMouse();
+                e.Handled = true;
             };
             win.MouseMove += delegate(object s, MouseEventArgs e)
             {
                 if (!_dragging) return;
-                Point pos = e.GetPosition(null);
-                win.Left = pos.X - _dragOffset.X;
-                win.Top = pos.Y - _dragOffset.Y;
+                Point now = Cursor.Position();
+                double left = _dragLeft + (now.X - _dragOrigin.X);
+                double top = _dragTop + (now.Y - _dragOrigin.Y);
+                // Skip no-op frames so a stationary pointer does not repaint.
+                if (left == win.Left && top == win.Top) return;
+                win.Left = left;
+                win.Top = top;
                 AlignEffects();
+                RepositionMenu();
+                e.Handled = true;
             };
             win.MouseLeftButtonUp += delegate(object s, MouseButtonEventArgs e)
             {
                 if (!_dragging) return;
                 _dragging = false;
-                if (e.Source is UIElement) ((UIElement)e.Source).ReleaseMouseCapture();
+                win.ReleaseMouseCapture();
+                ClampPetToScreen();
+                AlignEffects();
+                RepositionMenu();
                 SavePosition();
+                e.Handled = true;
             };
             win.MouseRightButtonDown += delegate(object s, MouseButtonEventArgs e) { ToggleMenu(); };
         }
 
+        /// <summary>Keep the size menu anchored above the pet while it moves.</summary>
+        void RepositionMenu()
+        {
+            if (_menu == null) return;
+            _menu.Left = Math.Max(0, _pet.Left);
+            _menu.Top = Math.Max(0, _pet.Top - _menu.Height);
+        }
+
+        /// <summary>Keep the pet fully on the virtual desktop after a drag.</summary>
+        void ClampPetToScreen()
+        {
+            double minLeft = SystemParameters.VirtualScreenLeft;
+            double minTop = SystemParameters.VirtualScreenTop;
+            double maxLeft = minLeft + SystemParameters.VirtualScreenWidth - _pet.Width;
+            double maxTop = minTop + SystemParameters.VirtualScreenHeight - _pet.Height;
+            _pet.Left = Math.Min(Math.Max(_pet.Left, minLeft), Math.Max(minLeft, maxLeft));
+            _pet.Top = Math.Min(Math.Max(_pet.Top, minTop), Math.Max(minTop, maxTop));
+        }
+
         void SavePosition()
         {
-            Rect screen = new Rect(0, 0, SystemParameters.PrimaryScreenWidth, SystemParameters.PrimaryScreenHeight);
-            double x = (_pet.Left + _pet.Width / 2 - screen.Left) / screen.Width;
-            double y = (_pet.Top + _pet.Height / 2 - screen.Top) / screen.Height;
+            // Use the virtual desktop so a pet parked on a secondary monitor keeps
+            // a stable ratio; ClampPetToScreen keeps it inside the same bounds.
+            double w = SystemParameters.VirtualScreenWidth;
+            double h = SystemParameters.VirtualScreenHeight;
+            if (w <= 0 || h <= 0) return;
+            double x = (_pet.Left + _pet.Width / 2 - SystemParameters.VirtualScreenLeft) / w;
+            double y = (_pet.Top + _pet.Height / 2 - SystemParameters.VirtualScreenTop) / h;
+            x = Math.Min(Math.Max(x, 0), 1);
+            y = Math.Min(Math.Max(y, 0), 1);
             _prefs.SavePosition(new SavedPosition { Display = "primary", X = x, Y = y });
         }
 
@@ -743,7 +979,9 @@ namespace PiFairy
             panel.Children.Add(hint);
             menu.Content = panel;
             _menu = menu;
+            menu.Owner = _pet;
             menu.Show();
+            menu.Activate();
         }
 
         void ResizePet()
@@ -757,7 +995,9 @@ namespace PiFairy
             _petImage.Height = pts;
             _pet.Left = cx - pts / 2;
             _pet.Top = cy - pts / 2;
+            ClampPetToScreen();
             AlignEffects();
+            RepositionMenu();
             SavePosition();
         }
 
@@ -804,8 +1044,10 @@ namespace PiFairy
             panel.Children.Add(rest);
             win.Content = panel;
             _restPrompt = win;
+            win.Owner = _pet;
             win.Closed += delegate(object s, EventArgs e) { _restPending = false; };
             win.Show();
+            win.Activate();
             PlayLifecycle("activity");
         }
 
@@ -828,9 +1070,66 @@ namespace PiFairy
 
         public void OnLeaseAcquired()
         {
-            if (_leaseSeen) return;
-            _leaseSeen = true;
-            if (_savedIntro) PlayLifecycle("welcome");
+            Application app = Application.Current;
+            if (app == null) return;
+            app.Dispatcher.BeginInvoke((Action)delegate()
+            {
+                _retiring = false;
+                if (_retireTimer != null) { _retireTimer.Stop(); _retireTimer = null; }
+                if (_leaseSeen) return;
+                _leaseSeen = true;
+                if (_savedIntro) PlayLifecycle("welcome");
+            });
+        }
+
+        bool _retiring;
+        DispatcherTimer _retireTimer;
+
+        /// <summary>
+        /// The last Pi lease closed. Keep the pet for a short grace so a reload or
+        /// a second Pi reconnecting does not flicker it, then play the shared
+        /// goodbye and exit. Without this the helper would show a pet forever.
+        /// </summary>
+        public void OnAllLeasesClosed()
+        {
+            // Called from a pipe handler thread; DispatcherTimer must be created on
+            // the UI thread or its Tick never fires.
+            Application app = Application.Current;
+            if (app == null) return;
+            app.Dispatcher.BeginInvoke((Action)delegate() { StartRetireTimer(); });
+        }
+
+        void StartRetireTimer()
+        {
+            if (_retiring) return;
+            _retiring = true;
+            if (_retireTimer != null) { _retireTimer.Stop(); _retireTimer = null; }
+            _retireTimer = new DispatcherTimer();
+            _retireTimer.Interval = TimeSpan.FromSeconds(3);
+            _retireTimer.Tick += delegate(object s, EventArgs e)
+            {
+                _retireTimer.Stop();
+                _retireTimer = null;
+                if (!_retiring) return; // a lease returned during the grace
+                PlayLifecycle("goodbye");
+                try
+                {
+                    if (_menu != null) { _menu.Close(); _menu = null; }
+                    if (_restPrompt != null) { _restPrompt.Close(); _restPrompt = null; }
+                    if (_pet != null) _pet.Close();
+                }
+                catch { }
+                // Let the goodbye clip start before the process goes away.
+                DispatcherTimer exit = new DispatcherTimer();
+                exit.Interval = TimeSpan.FromMilliseconds(1200);
+                exit.Tick += delegate(object s2, EventArgs e2)
+                {
+                    exit.Stop();
+                    if (_retiring) Environment.Exit(0); // a late lease keeps the pet alive
+                };
+                exit.Start();
+            };
+            _retireTimer.Start();
         }
     }
 
@@ -838,10 +1137,26 @@ namespace PiFairy
     internal class RippleCanvas : Canvas
     {
         double _time;
+        bool _wasVisible;
         public double Time
         {
             get { return _time; }
-            set { _time = value; InvalidateVisual(); }
+            set
+            {
+                _time = value;
+                // The rings are visible only during roughly a third of the 6.4s
+                // cycle; skip repaints while they are absent, but force one final
+                // repaint when they disappear so stale rings are erased.
+                double age = (value - 1) % 6.4;
+                bool visible = false;
+                for (int i = 0; i < 3; i++)
+                {
+                    double p = (age - i * 0.26) / 1.8;
+                    if (p > 0 && p < 1) { visible = true; break; }
+                }
+                if (visible || _wasVisible) InvalidateVisual();
+                _wasVisible = visible;
+            }
         }
 
         protected override void OnRender(DrawingContext dc)

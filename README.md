@@ -127,10 +127,13 @@ rmdir /s /q "%LOCALAPPDATA%\pi-fairy"
 
 ### 常见问题
 
-- **桌宠不显示**：确认在交互式 TUI 中（`pi -p "..."` 等非 TUI 模式不显示桌面，但语音仍会响）；先看 `/fairy-anim help`，再检查 `%LOCALAPPDATA%\pi-fairy\` 是否有 `Fairy-*.exe`。
+- **桌宠不显示**：确认在交互式 TUI 中（`pi -p "..."` 等非 TUI 模式不显示桌面，但语音仍会响）；先看 `/fairy-anim help`，再检查 `%LOCALAPPDATA%\pi-fairy\` 是否有 `Fairy-*.exe`，以及 `debug.log` 里的租约记录。
 - **首次启用卡顿**：首次会调用 `csc.exe` 编译约 1–2 秒，属正常；之后使用缓存。
+- **退出 Pi 后桌宠还在？** 不会：最后一个 Pi 断开后有 3 秒宽限（支持 reload/重连不闪烁），随后播放告别并退出。
+- **拖动或右键没反应**：确认点的是 Fairy 本体（透明四角点击穿透）；若 `debug.log` 无租约记录，说明桌面未连接。
 - **没有声音**：确认 `/fairy-voice status` 未静音；Windows 经 PowerShell `System.Media.SoundPlayer` 播放，若 PowerShell 执行策略受限请检查策略。
 - **共享声音关不掉**：欢迎/告别/休息提醒由桌面 owner 统一播放，`/fairy-voice off` 不影响它们（设计如此）。
+- **自检**：`Fairy-*.exe --self-test` 可无窗口运行拖动/涟漪/设置回归检查。
 
 ## 使用与行为边界
 

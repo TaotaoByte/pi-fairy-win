@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
 	buildHelper,
 	connectLease,
@@ -15,6 +17,8 @@ import {
 	DesktopClient,
 } from "../src/desktop/client.ts";
 
+const run = promisify(execFile);
+
 // Windows-native desktop coverage. macOS keeps its Swift/unix-socket suite;
 // these tests exercise the C#/WPF helper and its named-pipe protocol instead.
 const windows = process.platform === "win32";
@@ -23,6 +27,18 @@ const darwin = process.platform === "darwin";
 test("windows named-pipe address helpers are pure and reversible", () => {
 	assert.equal(pipePath("C:\\dir"), join("C:\\dir", "pipe"));
 	assert.equal(namedPipeConnectPath("pi-fairy-user"), "\\\\.\\pipe\\pi-fairy-user");
+});
+
+test("windows native self-test: drag math has no feedback and ripple repaints are bounded", { skip: !windows, timeout: 150_000 }, async () => {
+	const binary = await buildHelper();
+	// The helper is a winexe, but --self-test runs headless and prints results.
+	const result = await run(binary, ["--self-test"], { timeout: 120_000, windowsHide: true });
+	const out = String(result.stdout);
+	assert.match(out, /PASS drag tracks the screen cursor 1:1/);
+	assert.match(out, /PASS drag is monotonic \(no oscillation\)/);
+	assert.match(out, /PASS ripple repaint window is bounded/);
+	assert.match(out, /SELFTEST PASS/);
+	assert.doesNotMatch(out, /FAIL/);
 });
 
 test("windows private directory uses LOCALAPPDATA and is created on demand", { skip: !windows }, async () => {

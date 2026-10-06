@@ -1,5 +1,15 @@
 # 发布说明
 
+## 0.7.2-windows
+
+- **修复拖动鬼畜**：拖动不再用 `MouseEventArgs.GetPosition`（坐标相对于鼠标捕获的元素，窗口一动就把位移反馈给下一帧，导致抖动）。改用 Win32 `GetCursorPos` 的屏幕绝对坐标 + 拖动起点固定锚点，窗口 1:1 跟随鼠标，不会自激。
+- **修复退出后桌宠不消失**：新增共享 owner 的租约计数与 3 秒宽限退场（对应 macOS 的 flock 语义）。最后一个 Pi 断开后播放告别并退出；宽限内重连不闪烁。
+- **修复多实例重复桌宠**：用用户级命名 mutex（`Local\pi-fairy-<用户>`）保证单 owner，第二个 helper 自动退出，进程崩溃时由 OS 释放。
+- **修复动效面板抢输入**：effects 窗口改为宠物窗口的 owned window 并加 `WS_EX_TRANSPARENT|WS_EX_NOACTIVATE`，点击穿透到宠物，不再吞掉拖动/右键。
+- **修复主题轮询**：`Dark()` 之前每 50ms 读一次注册表，现改为缓存、最多每秒刷新两次。
+- **修复多屏与边界**：位置改用虚拟桌面坐标（支持副屏），拖动结束与缩放后夹紧到屏幕内；尺寸菜单跟随拖动。
+- **新增 `--self-test`**：无窗口的确定性回归测试，覆盖拖动数学（1:1、单调无振荡）、涟漪重绘窗口有界、设置读写回环；已接入 `desktop-win.test.ts`。
+
 ## 0.7.1-windows（本仓库移植）
 
 - **新增 Windows 桌面支持**：用 C# / WPF（.NET Framework 4.x）重写 `native/Fairy.swift` 为
